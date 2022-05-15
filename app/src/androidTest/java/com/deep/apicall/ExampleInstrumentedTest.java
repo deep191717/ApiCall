@@ -1,4 +1,4 @@
-package com.deep.apicall;
+package com.deep.api;
 
 import android.content.Context;
 
