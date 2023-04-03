@@ -4,19 +4,39 @@ import android.app.AlertDialog;
 import android.content.Context;
 import android.util.Log;
 
+import com.google.gson.Gson;
+import com.google.gson.reflect.TypeToken;
+
 import org.json.JSONArray;
 import org.json.JSONObject;
 
 import java.io.InputStream;
+import java.lang.reflect.Type;
 
-public abstract class Response implements ApiInterface {
+public abstract class Response<T> implements ApiInterface<T> {
 
     Context context;
 
-    public Response() {
+    private final Class<T> type;
+
+    public Response(Class<T> type) {
+        this.type = type;
     }
 
-    public Response with(Context context){
+    public T getData(String data) {
+        try {
+            return new Gson().fromJson(data, getType());
+        } catch (Exception e) {
+            e.printStackTrace();
+            return null;
+        }
+    }
+
+    private Class<T> getType() {
+        return type;
+    }
+
+    public Response<T> with(Context context){
         this.context = context;
         return this;
     }
@@ -25,7 +45,8 @@ public abstract class Response implements ApiInterface {
         return context;
     }
 
-    public Response(Context context) {
+    public Response(Class<T> type,Context context) {
+        this.type = type;
         this.context = context;
     }
 
@@ -45,6 +66,11 @@ public abstract class Response implements ApiInterface {
     }
 
     @Override
+    public void onSuccessInType(T t) {
+
+    }
+
+    @Override
     public void onSuccess(String response) {
         Log.d("Api Response :", response);
     }
@@ -54,6 +80,9 @@ public abstract class Response implements ApiInterface {
         String ex = "Api Response is Failed: "+code+"\nreason: "+exception;
         Log.e("Api Response", "onFailed: "+code+"\nreason: "+exception );
         if (code != 200) {
+            if (context==null){
+                return;
+            }
             try {
                 AlertDialog.Builder noInternetBuilder = new AlertDialog.Builder(context);
                 noInternetBuilder.setMessage(ex);

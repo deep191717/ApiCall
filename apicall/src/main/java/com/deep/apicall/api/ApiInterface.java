@@ -5,7 +5,7 @@ import org.json.JSONObject;
 
 import java.io.InputStream;
 
-public interface ApiInterface {
+public interface ApiInterface<T> {
     void onSuccess(JSONArray jsonArray);
 
     void onSuccess(JSONObject jsonObject);
@@ -13,6 +13,8 @@ public interface ApiInterface {
     void onSuccess(InputStream inputStream);
 
     void onSuccess(String response);
+
+    void onSuccessInType(T t);
 
     void onFailed(int code, String exception);
 }

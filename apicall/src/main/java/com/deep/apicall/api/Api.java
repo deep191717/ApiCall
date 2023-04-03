@@ -10,12 +10,14 @@ import org.json.JSONObject;
 import org.json.JSONTokener;
 
 import java.io.BufferedReader;
+import java.io.InputStream;
 import java.io.InputStreamReader;
 import java.util.HashMap;
 import java.util.Map;
 
 import javax.net.ssl.HttpsURLConnection;
 
+import okhttp3.Headers;
 import okhttp3.MediaType;
 import okhttp3.MultipartBody;
 import okhttp3.OkHttpClient;
@@ -26,8 +28,9 @@ import okhttp3.ResponseBody;
 @SuppressWarnings("unused")
 public class Api {
 
-    private String BASE_URL = "https://drpriteshinstitute.com/";
+    private String BASE_URL = "";
     private String method;
+    private Headers headers;
 
 
     public Api setRequestMethod(RequestMethod requestMethod) {
@@ -46,12 +49,13 @@ public class Api {
         return new Api(activity, activity.getClass().getSimpleName());
     }
 
-    public static Api with(Activity activity,String baseUrl) {
-        return new Api(activity, activity.getClass().getSimpleName(),baseUrl);
+    public static Api with(Activity activity, String baseUrl) {
+        return new Api(activity, activity.getClass().getSimpleName(), baseUrl);
     }
 
     private RequestBody body;
     private HashMap<String, String> perms = null;
+    private HashMap<String, String> headerPerms = null;
 
     public Api(Activity activity, String TAG) {
         this.activity = activity;
@@ -69,6 +73,14 @@ public class Api {
             perms = new HashMap<>();
         }
         perms.put(key, value);
+        return this;
+    }
+
+    public Api setHeader(String key, String value) {
+        if (headerPerms == null) {
+            headerPerms = new HashMap<>();
+        }
+        headerPerms.put(key, value);
         return this;
     }
 
@@ -93,23 +105,48 @@ public class Api {
         }
     }
 
+    private void setHeaders() {
+        if (headers == null) {
+            for (Map.Entry<String, String> entry : headerPerms.entrySet()) {
+                Log.e(TAG, "setHeaders: " + entry.getKey() + " = " + entry.getValue());
+            }
+            headers = Headers.of(headerPerms);
+        }
+    }
+
     public Api withNoPerms() {
         MultipartBody.Builder builder = new MultipartBody.Builder().setType(MultipartBody.FORM);
         body = builder.build();
         return this;
     }
 
+
     public void call(String url, @NonNull Response response) {
 
-        if (response.getContext()==null){
+        if (response.getContext() == null) {
             response.with(activity);
         }
 
         if ("GET".equals(method)) {
             url = embedUrl(url);
-        }else {
+        } else {
             setPerms();
         }
+        setHeaders();
+
+        if (BASE_URL == null || BASE_URL.trim().isEmpty()) {
+            activity.runOnUiThread(() -> response.onFailed(500, "BASE URL not found"));
+        }
+
+        if (method == null || method.trim().isEmpty()) {
+            activity.runOnUiThread(() -> response.onFailed(500, "Request Methode not found, example 'POST','GET'."));
+        }
+
+        if (url == null || url.trim().isEmpty()) {
+            Log.e(TAG, "call: " + BASE_URL + url);
+            activity.runOnUiThread(() -> response.onFailed(500, "URL invalid"));
+        }
+
         String finalUrl = url;
         new Thread(() -> {
             try {
@@ -118,14 +155,16 @@ public class Api {
                         .build();
                 //MediaType mediaType = MediaType.parse("text/plain");
 
+
                 Log.e(TAG, "call: " + BASE_URL + finalUrl);
 
                 Request request = new Request.Builder()
                         .url(BASE_URL + finalUrl)
                         .method(method, body)
+                        .headers(headers)
                         .build();
                 okhttp3.Response res = client.newCall(request).execute();
-                Log.e(TAG, "call: "+res.headers());
+                Log.e(TAG, "call: " + res.headers());
 
                 int responseCode = res.code();
                 StringBuilder sBuilder1 = new StringBuilder();
@@ -134,35 +173,39 @@ public class Api {
                     String line;
                     ResponseBody responseBody = res.body();
 
-                    if(responseBody==null){
+                    if (responseBody == null) {
                         activity.runOnUiThread(() -> response.onFailed(responseCode, "Response not found."));
                         return;
                     }
-                    
+
                     try {
-                        BufferedReader br = new BufferedReader(new InputStreamReader(responseBody.byteStream()));
+                        InputStream inputStream = responseBody.byteStream();
+                        activity.runOnUiThread(() -> response.onSuccess(inputStream));
+                        BufferedReader br = new BufferedReader(new InputStreamReader(inputStream));
                         while ((line = br.readLine()) != null) {
                             sBuilder1.append(line).append("\n");
                         }
                         Log.e(TAG, "call: " + sBuilder1);
                         if (!sBuilder1.toString().trim().isEmpty()) {
-                            JSONObject jsonObject = new JSONObject(sBuilder1.toString());
-                            String success = jsonObject.getString("res");
-                            String message = jsonObject.getString("msg");
-
-                            if (success.matches("success")) {
-                                String data = jsonObject.getString("data");
-                                Object json = new JSONTokener(data).nextValue();
-                                if (json instanceof JSONObject) {
-                                    activity.runOnUiThread(() -> response.onSuccess((JSONObject) json));
-                                } else if (json instanceof JSONArray) {
-                                    activity.runOnUiThread(() -> response.onSuccess((JSONArray) json));
-                                } else {
-                                    activity.runOnUiThread(() -> response.onSuccess(data));
-                                }
+//                            JSONObject jsonObject = new JSONObject(sBuilder1.toString());
+//                            String success = jsonObject.getString("res");
+//                            String message = jsonObject.getString("msg");
+//                            if (success.matches("success")) {
+//                                String data = jsonObject.getString("data");
+                            Object json = new JSONTokener(sBuilder1.toString()).nextValue();
+                            if (json instanceof JSONObject) {
+                                activity.runOnUiThread(() -> response.onSuccess((JSONObject) json));
+                            } else if (json instanceof JSONArray) {
+                                activity.runOnUiThread(() -> response.onSuccess((JSONArray) json));
                             } else {
-                                activity.runOnUiThread(() -> response.onFailed(responseCode, message));
+                                activity.runOnUiThread(() -> response.onSuccess(sBuilder1.toString()));
                             }
+
+                            activity.runOnUiThread(() -> response.onSuccessInType(response.getData(sBuilder1.toString())));
+
+//                            } else {
+//                                activity.runOnUiThread(() -> response.onFailed(responseCode, message));
+//                            }
                         } else {
                             activity.runOnUiThread(() -> response.onFailed(responseCode, "No Request Found For this Date."));
                         }
@@ -172,7 +215,7 @@ public class Api {
                     }
 
                 } else {
-                    activity.runOnUiThread(() -> response.onFailed(responseCode, res.message().isEmpty()?"Page Not Found":res.message()));
+                    activity.runOnUiThread(() -> response.onFailed(responseCode, res.message().isEmpty() ? "Page Not Found" : res.message()));
                 }
 
             } catch (Exception e) {
@@ -182,10 +225,10 @@ public class Api {
         }).start();
     }
 
-    private String embedUrl(String url){
+    private String embedUrl(String url) {
         StringBuilder u = new StringBuilder();
         u.append(url);
-        if (perms.entrySet().size()>0) {
+        if (perms.entrySet().size() > 0) {
             u.append("?");
             for (Map.Entry<String, String> entry : perms.entrySet()) {
                 u.append(entry.getKey()).append("=").append(entry.getValue()).append("&");
@@ -193,5 +236,6 @@ public class Api {
         }
         return u.toString();
     }
+
 
 }

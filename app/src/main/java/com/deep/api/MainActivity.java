@@ -8,6 +8,7 @@ import android.widget.Toast;
 import com.deep.apicall.api.Api;
 import com.deep.apicall.api.RequestMethod;
 import com.deep.apicall.api.Response;
+import com.deep.apicall.api.SimpleResponseModule;
 
 public class MainActivity extends AppCompatActivity {
 
@@ -20,7 +21,8 @@ public class MainActivity extends AppCompatActivity {
                 .setRequestMethod(RequestMethod.POST)
                 .setPerms("name", "morpheus")
                 .setPerms("job", "leader")
-                .call("api/users", new Response() {
+                .setHeader("Auth","Bearer ayasdjhgufeyhfrviejv.rgetbgggggukfshvieorn")
+                .call("api/users", new Response<SimpleResponseModule>(SimpleResponseModule.class) {
                     @Override
                     public void onSuccess(String response) {
                         super.onSuccess(response);
